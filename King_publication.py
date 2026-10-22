@@ -13,7 +13,7 @@ from sklearn.metrics import (
     mean_absolute_error
 )
 from tqdm import tqdm
-OUTPUT_DIR = "publication_results1"
+OUTPUT_DIR = "publication_result_1"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def haversine_distance_matrix(lat1, lon1, lat2, lon2):
@@ -351,8 +351,8 @@ print(
 plt.figure(figsize=(8, 6))
 
 plt.scatter(
-    standard_grade,
-    spatial_grade,
+    standard_grade/1000,
+    spatial_grade/1000,
     s=55,
     alpha=0.8
 )
@@ -360,12 +360,12 @@ plt.scatter(
 minimum_value = min(
     standard_grade.min(),
     spatial_grade.min()
-)
+)/1000
 
 maximum_value = max(
     standard_grade.max(),
     spatial_grade.max()
-)
+)/1000
 
 plt.plot(
     [minimum_value, maximum_value],
@@ -375,8 +375,8 @@ plt.plot(
     label="Equal attribution"
 )
 
-plt.xlabel("Standard SHAP value for grade")
-plt.ylabel("KNN Spatial SHAP value for grade")
+plt.xlabel("Standard SHAP value for grade ($1,000s)")
+plt.ylabel("KNN Spatial SHAP value for grade ($1,000s)")
 plt.title(
     "Standard SHAP and KNN Spatial SHAP "
     "for 50 Test Houses"
@@ -920,14 +920,14 @@ plt.figure(figsize=(8, 6))
 scatter = plt.scatter(
     coord_large["long"],
     coord_large["lat"],
-    c=location_effect_large,
+    c=location_effect_large / 1000,
     s=45,
     alpha=0.85
 )
 
 plt.colorbar(
     scatter,
-    label="Location effect"
+    label="Location effect ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -1119,11 +1119,11 @@ print(
 plt.figure(figsize=(8, 5))
 
 plt.hist(
-    decomposition_error_large,
+    decomposition_error_large/1000,
     bins=30
 )
 
-plt.xlabel("Decomposition error")
+plt.xlabel("Decomposition error ($1,000s)")
 plt.ylabel("Frequency")
 plt.title("Distribution of Decomposition Error for 600 Test Houses")
 
@@ -1216,16 +1216,16 @@ plt.figure(figsize=(8, 6))
 scatter = plt.scatter(
     coord_large["long"],
     coord_large["lat"],
-    c=standard_map_values,
+    c=standard_map_values / 1000,
     s=45,
     alpha=0.85,
-    vmin=combined_min,
-    vmax=combined_max
+    vmin=combined_min/1000,
+    vmax=combined_max/1000
 )
 
 plt.colorbar(
     scatter,
-    label=f"Standard SHAP value for {MAP_FEATURE}"
+    label=f"Standard SHAP for {MAP_FEATURE} ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -1260,16 +1260,16 @@ plt.figure(figsize=(8, 6))
 scatter = plt.scatter(
     coord_large["long"],
     coord_large["lat"],
-    c=spatial_map_values,
+    c=spatial_map_values/1000,
     s=45,
     alpha=0.85,
-    vmin=combined_min,
-    vmax=combined_max
+    vmin=combined_min/1000,
+    vmax=combined_max/1000
 )
 
 plt.colorbar(
     scatter,
-    label=f"KNN Spatial SHAP value for {MAP_FEATURE}"
+    label=f"KNN Spatial SHAP for {MAP_FEATURE} ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -1309,14 +1309,14 @@ plt.figure(figsize=(8, 6))
 scatter = plt.scatter(
     coord_large["long"],
     coord_large["lat"],
-    c=difference_map_values,
+    c=difference_map_values/1000,
     s=45,
     alpha=0.85
 )
 
 plt.colorbar(
     scatter,
-    label=f"Spatial minus Standard SHAP for {MAP_FEATURE}"
+    label=f"Spatial minus Standard SHAP for {MAP_FEATURE} ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -1393,8 +1393,8 @@ print("\nStandard SHAP map vs Spatial SHAP map comparison completed.")
 
 print("\n--- Starting continuous location effect map ---")
 
-# Start with a small grid to check the method
-GRID_SIZE = 10
+# Use a 50 x 50 grid for continuous spatial analysis
+GRID_SIZE = 50
 K_GRID = 20
 
 # Define the spatial range using training coordinates
@@ -1428,6 +1428,8 @@ grid_distance_matrix = haversine_distance_matrix(
     coord_train["long"].to_numpy()
 )
 
+# Distance to the nearest training house (km)
+nearest_train_distance = np.min(grid_distance_matrix, axis=1)
 # Predictions for all training houses
 train_predictions_grid = model.predict(X_train)
 
@@ -1457,7 +1459,8 @@ grid_results = pd.DataFrame({
     "Longitude": grid_lon,
     "Local baseline": grid_local_baselines,
     "Global baseline": global_base_value,
-    "Location effect": grid_location_effect
+    "Location effect": grid_location_effect,
+    "Nearest training house (km)": nearest_train_distance
 })
 
 grid_results.to_csv(
@@ -1480,14 +1483,14 @@ plt.figure(figsize=(9, 7))
 mesh = plt.pcolormesh(
     lon_grid,
     lat_grid,
-    effect_grid / 1000,
+    effect_grid/ 1000,
     shading="auto",
     cmap="coolwarm"
 )
 
 plt.colorbar(
     mesh,
-    label="Location effect (USD thousands)"
+    label="Location effect ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -1589,7 +1592,8 @@ regional_results = pd.DataFrame({
     "Feature": REGIONAL_FEATURE,
     "Regional importance": regional_importance,
     "Number of evaluation houses": N_REGIONAL_HOUSES,
-    "Background size": K_REGIONAL_BACKGROUND
+    "Background size": K_REGIONAL_BACKGROUND,
+    "Nearest training house (km)": nearest_train_distance
 })
 
 regional_results.to_csv(
@@ -1619,7 +1623,7 @@ mesh = plt.pcolormesh(
 
 plt.colorbar(
     mesh,
-    label=f"Mean absolute Spatial SHAP for {REGIONAL_FEATURE} (USD thousands)"
+label=f"Mean absolute Spatial SHAP for {REGIONAL_FEATURE} ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -1665,74 +1669,116 @@ GAUSSIAN_BACKGROUND_SIZE = 100
 # Adaptive bandwidth: distance to the 20th nearest house
 GAUSSIAN_BANDWIDTH_K = 20
 
-rng = np.random.default_rng(42)
+BANDWIDTH_MULTIPLIERS = [0.5, 1.0, 2.0]
 
-gaussian_shap_values = np.zeros(
-    (N_GAUSSIAN, X_large.shape[1])
-)
-
-gaussian_baselines = np.zeros(N_GAUSSIAN)
+gaussian_results_by_bandwidth = {}
 gaussian_bandwidths = np.zeros(N_GAUSSIAN)
 
-for i in tqdm(
-    range(N_GAUSSIAN),
-    desc="Gaussian Spatial SHAP"
-):
+for multiplier in BANDWIDTH_MULTIPLIERS:
 
-    current_x = X_large.iloc[[i]]
+    print(f"\nGaussian bandwidth multiplier = {multiplier}")
 
-    # Distances from current house to training houses
-    distances = large_distance_matrix[i]
+    rng = np.random.default_rng(42)
 
-    # Adaptive bandwidth in kilometres
-    bandwidth = np.partition(
-        distances,
-        GAUSSIAN_BANDWIDTH_K - 1
-    )[GAUSSIAN_BANDWIDTH_K - 1]
-
-    bandwidth = max(float(bandwidth), 1e-6)
-    gaussian_bandwidths[i] = bandwidth
-
-    # Gaussian weights, numerically stabilised
-    log_weights = -0.5 * (distances / bandwidth) ** 2
-    log_weights -= np.max(log_weights)
-
-    weights = np.exp(log_weights)
-    weights /= np.sum(weights)
-
-    # Weighted sampling with replacement
-    sampled_positions = rng.choice(
-        len(X_train),
-        size=GAUSSIAN_BACKGROUND_SIZE,
-        replace=True,
-        p=weights
+    current_shap_values = np.zeros(
+        (N_GAUSSIAN, X_large.shape[1])
     )
 
-    gaussian_background = X_train.iloc[
-        sampled_positions
-    ]
+    current_baselines = np.zeros(N_GAUSSIAN)
 
-    gaussian_explainer = shap.TreeExplainer(
-        model,
-        data=gaussian_background,
-        feature_perturbation="interventional"
+    for i in tqdm(
+        range(N_GAUSSIAN),
+        desc=f"Gaussian bandwidth {multiplier}"
+    ):
+
+        current_x = X_large.iloc[[i]]
+        distances = large_distance_matrix[i]
+
+        base_bandwidth = np.partition(
+            distances,
+            GAUSSIAN_BANDWIDTH_K - 1
+        )[GAUSSIAN_BANDWIDTH_K - 1]
+
+        bandwidth = max(
+            float(base_bandwidth) * multiplier,
+            1e-6
+        )
+
+        if multiplier == 1.0:
+            gaussian_bandwidths[i] = bandwidth
+
+        log_weights = -0.5 * (distances / bandwidth) ** 2
+        log_weights -= np.max(log_weights)
+
+        weights = np.exp(log_weights)
+        weights /= np.sum(weights)
+
+        sampled_positions = rng.choice(
+            len(X_train),
+            size=GAUSSIAN_BACKGROUND_SIZE,
+            replace=True,
+            p=weights
+        )
+
+        gaussian_background = X_train.iloc[sampled_positions]
+
+        gaussian_explainer = shap.TreeExplainer(
+            model,
+            data=gaussian_background,
+            feature_perturbation="interventional"
+        )
+
+        values = gaussian_explainer.shap_values(
+            current_x,
+            check_additivity=False
+        )
+
+        current_shap_values[i, :] = np.asarray(values)[0]
+
+        current_baselines[i] = float(
+            np.ravel(gaussian_explainer.expected_value)[0]
+        )
+
+    gaussian_results_by_bandwidth[multiplier] = (
+        current_shap_values.copy()
     )
 
-    values = gaussian_explainer.shap_values(
-        current_x,
-        check_additivity=False
-    )
+    if multiplier == 1.0:
+        gaussian_shap_values = current_shap_values.copy()
+        gaussian_baselines = current_baselines.copy()
 
-    gaussian_shap_values[i, :] = np.asarray(
-        values
-    )[0]
+# Gaussian bandwidth sensitivity analysis
 
-    gaussian_baselines[i] = float(
-        np.ravel(gaussian_explainer.expected_value)[0]
-    )
+bandwidth_sensitivity_rows = []
 
-print("\nGaussian Spatial SHAP completed.")
+feature_index_bw = X_large.columns.get_loc(GAUSSIAN_FEATURE)
+base_values = gaussian_results_by_bandwidth[1.0][:, feature_index_bw]
 
+for multiplier in [0.5, 2.0]:
+
+    test_values = gaussian_results_by_bandwidth[multiplier][:, feature_index_bw]
+
+    bandwidth_sensitivity_rows.append({
+        "Bandwidth multiplier": multiplier,
+        "Pearson correlation": pearsonr(base_values, test_values).statistic,
+        "Spearman correlation": spearmanr(base_values, test_values).statistic,
+        "Sign agreement (%)": np.mean(
+            np.sign(base_values) == np.sign(test_values)
+        ) * 100,
+        "Mean absolute difference (USD)": np.mean(
+            np.abs(base_values - test_values)
+        )
+    })
+
+bandwidth_sensitivity_table = pd.DataFrame(bandwidth_sensitivity_rows)
+
+bandwidth_sensitivity_table.to_csv(
+    os.path.join(OUTPUT_DIR, "KingCounty_Gaussian_bandwidth_sensitivity.csv"),
+    index=False
+)
+
+print("\nGaussian bandwidth sensitivity results:")
+print(bandwidth_sensitivity_table.round(4).to_string(index=False))
 # ------------------------------------------------------------
 # Compare Gaussian and KNN for the same houses
 # ------------------------------------------------------------
@@ -1837,7 +1883,7 @@ scatter = plt.scatter(
 
 plt.colorbar(
     scatter,
-    label=f"Gaussian Spatial SHAP for {GAUSSIAN_FEATURE} (USD thousands)"
+label=f"Gaussian Spatial SHAP for {GAUSSIAN_FEATURE} ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -1877,7 +1923,7 @@ scatter = plt.scatter(
 
 plt.colorbar(
     scatter,
-    label="Gaussian minus KNN SHAP (USD thousands)"
+label="Gaussian minus KNN SHAP ($1,000s)"
 )
 
 plt.xlabel("Longitude")
@@ -2295,7 +2341,7 @@ plt.figure(figsize=(8, 5))
 
 plt.plot(
     final_k_selection_table["K"],
-    final_k_selection_table["CV RMSE"],
+    final_k_selection_table["CV RMSE"] / 1000,
     marker="o"
 )
 
@@ -2306,7 +2352,7 @@ plt.axvline(
 )
 
 plt.xlabel("Neighbourhood size K")
-plt.ylabel("CV RMSE")
+plt.ylabel("CV RMSE ($1,000s)")
 plt.title("K Selection: CV Criterion")
 
 plt.legend()
