@@ -1,0 +1,9 @@
+Statistic,Value
+Number of houses,600.0
+Mean decomposition error,0.0002653355188419937
+Mean absolute decomposition error,0.0031188213367405143
+Median absolute decomposition error,0.002398947697656695
+Maximum absolute decomposition error,0.021489739243406802
+RMSE of decomposition error,0.004240296373920247
+Mean absolute standard prediction error,0.004273886345908977
+Mean absolute spatial prediction error,0.004175558175047627

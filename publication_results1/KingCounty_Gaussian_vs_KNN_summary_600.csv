@@ -1,0 +1,7 @@
+Metric,Value
+Number of houses,600.0
+Pearson correlation,0.9766288389434836
+Spearman correlation,0.9473988538857051
+Mean absolute difference (USD),20591.786397595817
+Sign agreement (%),93.5
+Mean Gaussian bandwidth (km),2.146295300876043
