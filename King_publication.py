@@ -13,7 +13,7 @@ from sklearn.metrics import (
     mean_absolute_error
 )
 from tqdm import tqdm
-OUTPUT_DIR = "publication_results"
+OUTPUT_DIR = "publication_results1"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def haversine_distance_matrix(lat1, lon1, lat2, lon2):
@@ -44,6 +44,32 @@ def haversine_distance_matrix(lat1, lon1, lat2, lon2):
 # ============================================================
 
 df = pd.read_csv("kc_house_data.csv")
+
+# Check the original dataset before removing columns
+print("\n--- Original dataset information ---")
+print("Number of observations:", len(df))
+print("Number of columns:", len(df.columns))
+print("\nOriginal columns:")
+print(df.columns.tolist())
+
+print("\nData types:")
+print(df.dtypes)
+
+print("\nMissing values:")
+print(df.isnull().sum())
+
+# Save the original feature information
+data_description = pd.DataFrame({
+    "feature": df.columns,
+    "data_type": df.dtypes.astype(str).values,
+    "missing_values": df.isnull().sum().values,
+    "unique_values": df.nunique().values
+})
+
+data_description.to_csv(
+    os.path.join(OUTPUT_DIR, "KingCounty_data_description.csv"),
+    index=False
+)
 
 df = df.drop(columns=["id", "date"])
 
@@ -745,7 +771,7 @@ print("\nKNN sensitivity analysis for top 5 features finished successfully.")
 
 # ============================================================
 # Expanded location effect map and decomposition check
-# Using 300 test houses
+# Using 600 test houses
 # ============================================================
 
 print("\n--- Starting expanded location effect and decomposition check ---")
@@ -754,16 +780,14 @@ print("\n--- Starting expanded location effect and decomposition check ---")
 # 1. Select a larger sample of test houses
 # ------------------------------------------------------------
 
-N_LARGE = min(300, len(X_test))
+# Use all 600 test houses
+N_LARGE = len(X_test)
 
-selected_indices_large = X_test.sample(
-    n=N_LARGE,
-    random_state=123
-).index
+selected_indices_large = X_test.index
 
-X_large = X_test.loc[selected_indices_large].copy()
-y_large = y_test.loc[selected_indices_large].copy()
-coord_large = coord_test.loc[selected_indices_large].copy()
+X_large = X_test.copy()
+y_large = y_test.copy()
+coord_large = coord_test.copy()
 
 print("\nExpanded sample selected:")
 print("Number of houses:", len(X_large))
@@ -877,18 +901,18 @@ location_effect_large_table = pd.DataFrame({
 })
 
 location_effect_large_table.to_csv(
-    os.path.join(OUTPUT_DIR, "KingCounty_location_effect_300_houses.csv"),
+    os.path.join(OUTPUT_DIR, "KingCounty_location_effect_600_houses.csv"),
     index=False
 )
 
 print(
     "\nLocation effect table saved as: "
-    "KingCounty_location_effect_300_houses.csv"
+    "KingCounty_location_effect_600_houses.csv"
 )
 
 
 # ------------------------------------------------------------
-# 5. Location effect map for 300 houses
+# 5. Location effect map for 600 houses
 # ------------------------------------------------------------
 
 plt.figure(figsize=(8, 6))
@@ -908,12 +932,12 @@ plt.colorbar(
 
 plt.xlabel("Longitude")
 plt.ylabel("Latitude")
-plt.title("Location Effect for 300 Test Houses")
+plt.title("Location Effect for 600 Test Houses")
 
 plt.tight_layout()
 
 plt.savefig(
-    os.path.join(OUTPUT_DIR, "Figure14_location_effect_300_houses.png"),
+    os.path.join(OUTPUT_DIR, "Figure14_location_effect_600_houses.png"),
     dpi=300,
     bbox_inches="tight"
 )
@@ -922,7 +946,7 @@ plt.show()
 
 print(
     "\nFigure saved as: "
-    "Figure14_location_effect_300_houses.png"
+    "Figure14_location_effect_600_houses.png"
 )
 
 
@@ -949,7 +973,7 @@ location_effect_large_summary = pd.DataFrame({
     ]
 })
 
-print("\nLocation effect summary for 300 houses:\n")
+print("\nLocation effect summary for 600 houses:\n")
 print(
     location_effect_large_summary.round(2).to_string(
         index=False
@@ -957,13 +981,13 @@ print(
 )
 
 location_effect_large_summary.to_csv(
-    os.path.join(OUTPUT_DIR, "KingCounty_location_effect_summary_300_houses.csv"),
+    os.path.join(OUTPUT_DIR, "KingCounty_location_effect_summary_600_houses.csv"),
     index=False
 )
 
 print(
     "\nLocation effect summary saved as: "
-    "KingCounty_location_effect_summary_300_houses.csv"
+    "KingCounty_location_effect_summary_600_houses.csv"
 )
 
 
@@ -1033,13 +1057,13 @@ decomposition_check_table = pd.DataFrame({
 })
 
 decomposition_check_table.to_csv(
-    os.path.join(OUTPUT_DIR, "KingCounty_decomposition_check_300_houses.csv"),
+    os.path.join(OUTPUT_DIR, "KingCounty_decomposition_check_600_houses.csv"),
     index=False
 )
 
 print(
     "\nDecomposition check table saved as: "
-    "KingCounty_decomposition_check_300_houses.csv"
+    "KingCounty_decomposition_check_600_houses.csv"
 )
 
 
@@ -1078,13 +1102,13 @@ print(
 )
 
 decomposition_summary.to_csv(
-    os.path.join(OUTPUT_DIR, "KingCounty_decomposition_summary_300_houses.csv"),
+    os.path.join(OUTPUT_DIR, "KingCounty_decomposition_summary_600_houses.csv"),
     index=False
 )
 
 print(
     "\nDecomposition summary saved as: "
-    "KingCounty_decomposition_summary_300_houses.csv"
+    "KingCounty_decomposition_summary_600_houses.csv"
 )
 
 
@@ -1101,12 +1125,12 @@ plt.hist(
 
 plt.xlabel("Decomposition error")
 plt.ylabel("Frequency")
-plt.title("Distribution of Decomposition Error for 300 Test Houses")
+plt.title("Distribution of Decomposition Error for 600 Test Houses")
 
 plt.tight_layout()
 
 plt.savefig(
-    os.path.join(OUTPUT_DIR, "Figure15_decomposition_error_300_houses.png"),
+    os.path.join(OUTPUT_DIR, "Figure15_decomposition_error_600_houses.png"),
     dpi=300,
     bbox_inches="tight"
 )
@@ -1115,14 +1139,14 @@ plt.show()
 
 print(
     "\nFigure saved as: "
-    "Figure15_decomposition_error_300_houses.png"
+    "Figure15_decomposition_error_600_houses.png"
 )
 
 print("\nExpanded location effect and decomposition check completed.")
 
 # ============================================================
 # Standard SHAP map vs Spatial SHAP map
-# For grade feature, using 300 test houses
+# For grade feature, using 600 test houses
 # ============================================================
 
 print("\n--- Starting Standard SHAP map vs Spatial SHAP map comparison ---")
@@ -1157,14 +1181,14 @@ map_comparison_table = pd.DataFrame({
 map_comparison_table.to_csv(
     os.path.join(
         OUTPUT_DIR,
-        f"KingCounty_standard_vs_spatial_map_{MAP_FEATURE}_300.csv"
+        f"KingCounty_standard_vs_spatial_map_{MAP_FEATURE}_600.csv"
     ),
     index=False
 )
 
 print(
     "\nMap comparison table saved as: "
-    f"KingCounty_standard_vs_spatial_map_{MAP_FEATURE}_300.csv"
+    f"KingCounty_standard_vs_spatial_map_{MAP_FEATURE}_600.csv"
 )
 
 
@@ -1206,14 +1230,14 @@ plt.colorbar(
 
 plt.xlabel("Longitude")
 plt.ylabel("Latitude")
-plt.title(f"Standard SHAP Map for {MAP_FEATURE} - 300 Test Houses")
+plt.title(f"Standard SHAP Map for {MAP_FEATURE} - 600 Test Houses")
 
 plt.tight_layout()
 
 plt.savefig(
     os.path.join(
         OUTPUT_DIR,
-        f"Figure17_standard_SHAP_map_{MAP_FEATURE}_300.png"
+        f"Figure17_standard_SHAP_map_{MAP_FEATURE}_600.png"
     ),
     dpi=300,
     bbox_inches="tight"
@@ -1223,7 +1247,7 @@ plt.show()
 
 print(
     "\nFigure saved as: "
-    f"Figure17_standard_SHAP_map_{MAP_FEATURE}_300.png"
+    f"Figure17_standard_SHAP_map_{MAP_FEATURE}_600.png"
 )
 
 
@@ -1250,14 +1274,14 @@ plt.colorbar(
 
 plt.xlabel("Longitude")
 plt.ylabel("Latitude")
-plt.title(f"KNN Spatial SHAP Map for {MAP_FEATURE} - 300 Test Houses")
+plt.title(f"KNN Spatial SHAP Map for {MAP_FEATURE} - 600 Test Houses")
 
 plt.tight_layout()
 
 plt.savefig(
     os.path.join(
         OUTPUT_DIR,
-        f"Figure18_spatial_SHAP_map_{MAP_FEATURE}_300.png"
+        f"Figure18_spatial_SHAP_map_{MAP_FEATURE}_600.png"
     ),
     dpi=300,
     bbox_inches="tight"
@@ -1267,7 +1291,7 @@ plt.show()
 
 print(
     "\nFigure saved as: "
-    f"Figure18_spatial_SHAP_map_{MAP_FEATURE}_300.png"
+    f"Figure18_spatial_SHAP_map_{MAP_FEATURE}_600.png"
 )
 
 
@@ -1304,7 +1328,7 @@ plt.tight_layout()
 plt.savefig(
     os.path.join(
         OUTPUT_DIR,
-        f"Figure19_difference_map_{MAP_FEATURE}_300.png"
+        f"Figure19_difference_map_{MAP_FEATURE}_600.png"
     ),
     dpi=300,
     bbox_inches="tight"
@@ -1314,7 +1338,7 @@ plt.show()
 
 print(
     "\nFigure saved as: "
-    f"Figure19_difference_map_{MAP_FEATURE}_300.png"
+    f"Figure19_difference_map_{MAP_FEATURE}_600.png"
 )
 
 
@@ -1350,17 +1374,533 @@ print(
 map_summary.to_csv(
     os.path.join(
         OUTPUT_DIR,
-        f"KingCounty_map_comparison_summary_{MAP_FEATURE}_300.csv"
+        f"KingCounty_map_comparison_summary_{MAP_FEATURE}_600.csv"
     ),
     index=False
 )
 
 print(
     "\nMap comparison summary saved as: "
-    f"KingCounty_map_comparison_summary_{MAP_FEATURE}_300.csv"
+    f"KingCounty_map_comparison_summary_{MAP_FEATURE}_600.csv"
 )
 
 print("\nStandard SHAP map vs Spatial SHAP map comparison completed.")
+
+
+# ============================================================
+# Figure 22. Continuous Location Effect Map
+# ============================================================
+
+print("\n--- Starting continuous location effect map ---")
+
+# Start with a small grid to check the method
+GRID_SIZE = 10
+K_GRID = 20
+
+# Define the spatial range using training coordinates
+lat_values = np.linspace(
+    coord_train["lat"].min(),
+    coord_train["lat"].max(),
+    GRID_SIZE
+)
+
+lon_values = np.linspace(
+    coord_train["long"].min(),
+    coord_train["long"].max(),
+    GRID_SIZE
+)
+
+lon_grid, lat_grid = np.meshgrid(
+    lon_values,
+    lat_values
+)
+
+grid_lat = lat_grid.ravel()
+grid_lon = lon_grid.ravel()
+
+print("Number of grid locations:", len(grid_lat))
+
+# Distances from each grid location to training houses
+grid_distance_matrix = haversine_distance_matrix(
+    grid_lat,
+    grid_lon,
+    coord_train["lat"].to_numpy(),
+    coord_train["long"].to_numpy()
+)
+
+# Predictions for all training houses
+train_predictions_grid = model.predict(X_train)
+
+# Local baseline at each grid location
+grid_local_baselines = np.zeros(len(grid_lat))
+
+for i in tqdm(
+    range(len(grid_lat)),
+    desc="Continuous location effect"
+):
+    neighbour_positions = np.argsort(
+        grid_distance_matrix[i]
+    )[:K_GRID]
+
+    grid_local_baselines[i] = np.mean(
+        train_predictions_grid[neighbour_positions]
+    )
+
+# Compare local and global SHAP baselines
+grid_location_effect = (
+    grid_local_baselines - global_base_value
+)
+
+# Save numerical results
+grid_results = pd.DataFrame({
+    "Latitude": grid_lat,
+    "Longitude": grid_lon,
+    "Local baseline": grid_local_baselines,
+    "Global baseline": global_base_value,
+    "Location effect": grid_location_effect
+})
+
+grid_results.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        f"KingCounty_continuous_location_effect_grid_{GRID_SIZE}.csv"
+    ),
+    index=False
+)
+
+# Reshape values into a two-dimensional grid
+effect_grid = grid_location_effect.reshape(
+    GRID_SIZE,
+    GRID_SIZE
+)
+
+# Plot in thousands of US dollars
+plt.figure(figsize=(9, 7))
+
+mesh = plt.pcolormesh(
+    lon_grid,
+    lat_grid,
+    effect_grid / 1000,
+    shading="auto",
+    cmap="coolwarm"
+)
+
+plt.colorbar(
+    mesh,
+    label="Location effect (USD thousands)"
+)
+
+plt.xlabel("Longitude")
+plt.ylabel("Latitude")
+
+plt.title(
+    f"Continuous Location Effect Map ({GRID_SIZE} x {GRID_SIZE} Grid)"
+)
+
+plt.tight_layout()
+
+plt.savefig(
+    os.path.join(
+        OUTPUT_DIR,
+        f"Figure22_continuous_location_effect_grid_{GRID_SIZE}.png"
+    ),
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+print("\nContinuous location effect map completed.")
+
+
+# ============================================================
+# Figure 23. Regional Feature Importance Map
+# ============================================================
+
+print("\n--- Starting regional feature importance map ---")
+
+REGIONAL_FEATURE = "grade"
+N_REGIONAL_HOUSES = 10
+K_REGIONAL_BACKGROUND = 20
+
+# Reuse the grid created for Figure 22
+regional_importance = np.zeros(len(grid_lat))
+
+# Find nearby test houses at each grid location
+grid_test_distances = haversine_distance_matrix(
+    grid_lat,
+    grid_lon,
+    coord_test["lat"].to_numpy(),
+    coord_test["long"].to_numpy()
+)
+
+feature_index = X_test.columns.get_loc(
+    REGIONAL_FEATURE
+)
+
+for i in tqdm(
+    range(len(grid_lat)),
+    desc="Regional feature importance"
+):
+
+    # 1. Select the 20 nearest training houses
+    background_positions = np.argsort(
+        grid_distance_matrix[i]
+    )[:K_REGIONAL_BACKGROUND]
+
+    local_background = X_train.iloc[
+        background_positions
+    ]
+
+    # 2. Select the 10 nearest test houses
+    evaluation_positions = np.argsort(
+        grid_test_distances[i]
+    )[:N_REGIONAL_HOUSES]
+
+    local_evaluation = X_test.iloc[
+        evaluation_positions
+    ]
+
+    # 3. Calculate Spatial SHAP at this grid location
+    regional_explainer = shap.TreeExplainer(
+        model,
+        data=local_background,
+        feature_perturbation="interventional"
+    )
+
+    regional_shap_values = np.asarray(
+        regional_explainer.shap_values(
+            local_evaluation,
+            check_additivity=False
+        )
+    )
+
+    # 4. Mean absolute SHAP value for grade
+    regional_importance[i] = np.mean(
+        np.abs(
+            regional_shap_values[:, feature_index]
+        )
+    )
+
+# Save regional importance results
+regional_results = pd.DataFrame({
+    "Latitude": grid_lat,
+    "Longitude": grid_lon,
+    "Feature": REGIONAL_FEATURE,
+    "Regional importance": regional_importance,
+    "Number of evaluation houses": N_REGIONAL_HOUSES,
+    "Background size": K_REGIONAL_BACKGROUND
+})
+
+regional_results.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        f"KingCounty_regional_importance_{REGIONAL_FEATURE}_grid_{GRID_SIZE}.csv"
+    ),
+    index=False
+)
+
+# Reshape into grid
+regional_importance_grid = regional_importance.reshape(
+    GRID_SIZE,
+    GRID_SIZE
+)
+
+# Plot in thousands of US dollars
+plt.figure(figsize=(9, 7))
+
+mesh = plt.pcolormesh(
+    lon_grid,
+    lat_grid,
+    regional_importance_grid / 1000,
+    shading="auto",
+    cmap="viridis"
+)
+
+plt.colorbar(
+    mesh,
+    label=f"Mean absolute Spatial SHAP for {REGIONAL_FEATURE} (USD thousands)"
+)
+
+plt.xlabel("Longitude")
+plt.ylabel("Latitude")
+
+plt.title(
+    f"Regional Importance of {REGIONAL_FEATURE} "
+    f"({GRID_SIZE} x {GRID_SIZE} Grid)"
+)
+
+plt.tight_layout()
+
+plt.savefig(
+    os.path.join(
+        OUTPUT_DIR,
+        f"Figure23_regional_importance_{REGIONAL_FEATURE}_grid_{GRID_SIZE}.png"
+    ),
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+print("\nRegional feature importance map completed.")
+
+
+# ============================================================
+# Gaussian Kernel Spatial SHAP: comparison with KNN
+# ============================================================
+
+print("\n--- Starting Gaussian Kernel Spatial SHAP ---")
+
+from scipy.stats import pearsonr, spearmanr
+
+GAUSSIAN_FEATURE = "grade"
+
+# First test 50 houses, then use all 600
+N_GAUSSIAN = len(X_large)
+
+# Background samples drawn from Gaussian weights
+GAUSSIAN_BACKGROUND_SIZE = 100
+
+# Adaptive bandwidth: distance to the 20th nearest house
+GAUSSIAN_BANDWIDTH_K = 20
+
+rng = np.random.default_rng(42)
+
+gaussian_shap_values = np.zeros(
+    (N_GAUSSIAN, X_large.shape[1])
+)
+
+gaussian_baselines = np.zeros(N_GAUSSIAN)
+gaussian_bandwidths = np.zeros(N_GAUSSIAN)
+
+for i in tqdm(
+    range(N_GAUSSIAN),
+    desc="Gaussian Spatial SHAP"
+):
+
+    current_x = X_large.iloc[[i]]
+
+    # Distances from current house to training houses
+    distances = large_distance_matrix[i]
+
+    # Adaptive bandwidth in kilometres
+    bandwidth = np.partition(
+        distances,
+        GAUSSIAN_BANDWIDTH_K - 1
+    )[GAUSSIAN_BANDWIDTH_K - 1]
+
+    bandwidth = max(float(bandwidth), 1e-6)
+    gaussian_bandwidths[i] = bandwidth
+
+    # Gaussian weights, numerically stabilised
+    log_weights = -0.5 * (distances / bandwidth) ** 2
+    log_weights -= np.max(log_weights)
+
+    weights = np.exp(log_weights)
+    weights /= np.sum(weights)
+
+    # Weighted sampling with replacement
+    sampled_positions = rng.choice(
+        len(X_train),
+        size=GAUSSIAN_BACKGROUND_SIZE,
+        replace=True,
+        p=weights
+    )
+
+    gaussian_background = X_train.iloc[
+        sampled_positions
+    ]
+
+    gaussian_explainer = shap.TreeExplainer(
+        model,
+        data=gaussian_background,
+        feature_perturbation="interventional"
+    )
+
+    values = gaussian_explainer.shap_values(
+        current_x,
+        check_additivity=False
+    )
+
+    gaussian_shap_values[i, :] = np.asarray(
+        values
+    )[0]
+
+    gaussian_baselines[i] = float(
+        np.ravel(gaussian_explainer.expected_value)[0]
+    )
+
+print("\nGaussian Spatial SHAP completed.")
+
+# ------------------------------------------------------------
+# Compare Gaussian and KNN for the same houses
+# ------------------------------------------------------------
+
+feature_index = X_large.columns.get_loc(
+    GAUSSIAN_FEATURE
+)
+
+knn_values = spatial_shap_large[
+    :N_GAUSSIAN,
+    feature_index
+]
+
+gaussian_values = gaussian_shap_values[
+    :,
+    feature_index
+]
+
+difference_values = gaussian_values - knn_values
+
+comparison_gaussian = pd.DataFrame({
+    "Original index": X_large.index[:N_GAUSSIAN],
+    "Latitude": coord_large["lat"].to_numpy()[:N_GAUSSIAN],
+    "Longitude": coord_large["long"].to_numpy()[:N_GAUSSIAN],
+    "KNN SHAP": knn_values,
+    "Gaussian SHAP": gaussian_values,
+    "Gaussian minus KNN": difference_values,
+    "Gaussian bandwidth (km)": gaussian_bandwidths,
+    "Gaussian baseline": gaussian_baselines
+})
+
+comparison_gaussian.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        f"KingCounty_Gaussian_vs_KNN_{GAUSSIAN_FEATURE}_{N_GAUSSIAN}.csv"
+    ),
+    index=False
+)
+
+pearson_value = pearsonr(
+    knn_values,
+    gaussian_values
+).statistic
+
+spearman_value = spearmanr(
+    knn_values,
+    gaussian_values
+).statistic
+
+mean_abs_difference = np.mean(
+    np.abs(difference_values)
+)
+
+sign_agreement = np.mean(
+    np.sign(knn_values) == np.sign(gaussian_values)
+) * 100
+
+gaussian_summary = pd.DataFrame({
+    "Metric": [
+        "Number of houses",
+        "Pearson correlation",
+        "Spearman correlation",
+        "Mean absolute difference (USD)",
+        "Sign agreement (%)",
+        "Mean Gaussian bandwidth (km)"
+    ],
+    "Value": [
+        N_GAUSSIAN,
+        pearson_value,
+        spearman_value,
+        mean_abs_difference,
+        sign_agreement,
+        np.mean(gaussian_bandwidths)
+    ]
+})
+
+print("\nGaussian vs KNN comparison:")
+print(gaussian_summary.to_string(index=False))
+
+gaussian_summary.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        f"KingCounty_Gaussian_vs_KNN_summary_{N_GAUSSIAN}.csv"
+    ),
+    index=False
+)
+
+# ------------------------------------------------------------
+# Figure 24: Gaussian Spatial SHAP Map
+# ------------------------------------------------------------
+
+plt.figure(figsize=(9, 7))
+
+scatter = plt.scatter(
+    coord_large["long"].to_numpy()[:N_GAUSSIAN],
+    coord_large["lat"].to_numpy()[:N_GAUSSIAN],
+    c=gaussian_values / 1000,
+    cmap="coolwarm",
+    s=45,
+    alpha=0.85
+)
+
+plt.colorbar(
+    scatter,
+    label=f"Gaussian Spatial SHAP for {GAUSSIAN_FEATURE} (USD thousands)"
+)
+
+plt.xlabel("Longitude")
+plt.ylabel("Latitude")
+plt.title(
+    f"Gaussian Spatial SHAP Map for {GAUSSIAN_FEATURE} "
+    f"({N_GAUSSIAN} Houses)"
+)
+
+plt.tight_layout()
+
+plt.savefig(
+    os.path.join(
+        OUTPUT_DIR,
+        f"Figure24_Gaussian_SHAP_{GAUSSIAN_FEATURE}_{N_GAUSSIAN}.png"
+    ),
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+# ------------------------------------------------------------
+# Figure 25: Gaussian minus KNN Map
+# ------------------------------------------------------------
+
+plt.figure(figsize=(9, 7))
+
+scatter = plt.scatter(
+    coord_large["long"].to_numpy()[:N_GAUSSIAN],
+    coord_large["lat"].to_numpy()[:N_GAUSSIAN],
+    c=difference_values / 1000,
+    cmap="coolwarm",
+    s=45,
+    alpha=0.85
+)
+
+plt.colorbar(
+    scatter,
+    label="Gaussian minus KNN SHAP (USD thousands)"
+)
+
+plt.xlabel("Longitude")
+plt.ylabel("Latitude")
+plt.title(
+    f"Gaussian minus KNN Spatial SHAP for {GAUSSIAN_FEATURE}"
+)
+
+plt.tight_layout()
+
+plt.savefig(
+    os.path.join(
+        OUTPUT_DIR,
+        f"Figure25_Gaussian_minus_KNN_{GAUSSIAN_FEATURE}_{N_GAUSSIAN}.png"
+    ),
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+print("\nGaussian vs KNN experiment completed.")
+
 
 # ============================================================
 # Final K selection experiment
