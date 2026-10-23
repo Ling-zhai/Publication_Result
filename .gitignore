@@ -1,0 +1,11 @@
+﻿.idea/
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore generated files in the root directory
+/*.png
+/*.csv
+
+# Keep the original King County dataset
+!/kc_house_data.csv
