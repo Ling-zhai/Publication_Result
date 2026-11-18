@@ -1,0 +1,30 @@
+{
+  "train_count": 2400,
+  "test_count": 600,
+  "features": [
+    "bedrooms",
+    "bathrooms",
+    "sqft_living",
+    "sqft_lot",
+    "floors",
+    "waterfront",
+    "view",
+    "condition",
+    "grade",
+    "sqft_above",
+    "sqft_basement",
+    "yr_built",
+    "yr_renovated",
+    "sqft_living15",
+    "sqft_lot15"
+  ],
+  "global_baseline": 516168.4295000001,
+  "r2": 0.6457998666555733,
+  "rmse": 196057.78727741662,
+  "mae": 123866.66180555557,
+  "selected_features": [
+    "grade",
+    "sqft_living"
+  ],
+  "K": 20
+}

@@ -1,0 +1,3 @@
+feature,houses,mean_absolute_difference_usd,sign_change_percent,pearson_r
+grade,600,65813.47452294076,16.833333333333332,0.8167241331235904
+sqft_living,600,46263.801510909674,19.5,0.8210558247288552
