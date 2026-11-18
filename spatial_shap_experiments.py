@@ -144,10 +144,11 @@ def load_shap():
     return d,pd.Index(indices),{key:np.concatenate([b[key] for b in blocks],axis=0) for key in blocks[0] if key!='indices'}
 
 
-def plot_spatial(lon,lat,values,title,label,path,diverging=True):
+def plot_spatial(lon, lat, values, title, label, path, diverging=True, vmax=None):
     plt.figure(figsize=(9,7))
     if diverging:
-        vmax=float(np.max(np.abs(values))) or 1
+        if vmax is None:
+            vmax = float(np.max(np.abs(values))) or 1
         sc=plt.scatter(lon,lat,c=values/1000,cmap='coolwarm',vmin=-vmax/1000,vmax=vmax/1000,s=20)
     else:
         sc=plt.scatter(lon,lat,c=values/1000,cmap='viridis',s=20)
@@ -174,11 +175,12 @@ def maps():
     for feature in FEATURES:
         j=d['feature_names'].index(feature)
         std=z['standard'][:,j];local=z['local'][:,j];delta=local-std
+        shared_vmax = max(np.max(np.abs(std)), np.max(np.abs(local)))
         t=frame[['index','lat','long']].copy()
         t['standard_shap_usd']=std;t['spatial_shap_usd']=local;t['spatial_minus_standard_usd']=delta
         t.to_csv(TABLE/f'{feature}_shap.csv',index=False)
-        plot_spatial(t.long,t.lat,std,f'Standard SHAP: {feature}','Standard SHAP',FIG/f'{feature}_standard_shap.png')
-        plot_spatial(t.long,t.lat,local,f'KNN Spatial SHAP: {feature}, K={K}','Spatial SHAP',FIG/f'{feature}_spatial_shap.png')
+        plot_spatial(t.long,t.lat,std,f'Standard SHAP: {feature}','Standard SHAP',FIG/f'{feature}_standard_shap.png',vmax=shared_vmax)
+        plot_spatial(t.long,t.lat,local,f'KNN Spatial SHAP: {feature}, K={K}','Spatial SHAP',FIG/f'{feature}_spatial_shap.png',vmax=shared_vmax)
         plot_spatial(t.long,t.lat,delta,f'Spatial minus standard: {feature}','Difference',FIG/f'{feature}_shap_difference.png')
     print('Maps saved in',FIG)
 
