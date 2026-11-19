@@ -6,6 +6,10 @@ Run independently:
   python spatial_shap_experiments.py maps
   python spatial_shap_experiments.py regional --grid-size 20
   python spatial_shap_experiments.py summary
+  python spatial_shap_experiments.py gaussian --limit 25
+  python spatial_shap_experiments.py gaussian --limit 600
+  python spatial_shap_experiments.py gaussian-summary
+  python spatial_shap_experiments.py gaussian-regional --grid-size 20 --n-eval 30
 
 Only writes spatial_shap_results/, never publication_results/ or publication_result_1/.
 """
@@ -186,7 +190,11 @@ def maps():
 
 
 def regional(grid_size, chunk_size, n_eval, max_distance_km):
+    if grid_size < 2 or chunk_size < 1 or n_eval < 1 or max_distance_km <= 0:
+        raise ValueError('Require grid-size >= 2, chunk-size >= 1, n-eval >= 1, and max-distance-km > 0')
     dirs();d=get();Xtr=d['X_train'];ctr=d['coord_train'];model=d['model']
+    if max(K, n_eval) > len(Xtr):
+        raise ValueError('K and n-eval must not exceed the number of training houses')
     # Define evaluation samples from local training observations, matching P_u in James's Eq. for I_i(u).
     # For test-only evaluation replace with test samples, but then the sampling distribution is different.
     lats=np.linspace(ctr.lat.min(),ctr.lat.max(),grid_size)
@@ -196,11 +204,18 @@ def regional(grid_size, chunk_size, n_eval, max_distance_km):
     dst=distances(latitude,longitude,ctr.lat,ctr.long)
     neighbor=np.argsort(dst,axis=1)[:,:max(K,n_eval)]
     nearest=np.min(dst,axis=1)
-    pfx=f'regional_g{grid_size}_eval{n_eval}_k{K}'
+    # Cache and outputs must encode every parameter affecting the numerical results.
+    distance_tag=format(max_distance_km,'.8g').replace('.','p')
+    pfx=f'regional_g{grid_size}_eval{n_eval}_k{K}_mask{distance_tag}km'
     for start in range(0,len(latitude),chunk_size):
         end=min(start+chunk_size,len(latitude))
         fn=CACHE/f'{pfx}_{start:04d}_{end:04d}.csv'
-        if fn.exists(): print('Reuse',fn.name);continue
+        if fn.exists():
+            cached=pd.read_csv(fn)
+            if cached.grid_index.tolist()!=list(range(start,end)):
+                raise RuntimeError(f'Unexpected cached grid indexes in {fn}; inspect the file before rerunning')
+            print('Reuse',fn.name)
+            continue
         results=[]
         for r in range(start,end):
             rec={'grid_index':r,'lat':latitude[r],'long':longitude[r],
@@ -218,8 +233,12 @@ def regional(grid_size, chunk_size, n_eval, max_distance_km):
         pd.DataFrame(results).to_csv(fn,index=False)
         print('Regional cells cached',end,'/',len(latitude))
     files=sorted(CACHE.glob(pfx+'_????_????.csv'))
+    if not files:
+        raise RuntimeError('No regional chunks were produced')
     parts=[pd.read_csv(p) for p in files]
-    full=pd.concat(parts,ignore_index=True).sort_values('grid_index').drop_duplicates('grid_index')
+    full=pd.concat(parts,ignore_index=True).sort_values('grid_index')
+    if full.grid_index.duplicated().any():
+        raise RuntimeError('Duplicate regional grid indexes in cache; use the same chunk-size as before')
     if full.grid_index.tolist()!=list(range(len(latitude))):
         raise RuntimeError('Regional grid incomplete; rerun with same grid and chunk settings')
     full.to_csv(TABLE/f'{pfx}.csv',index=False)
@@ -229,8 +248,219 @@ def regional(grid_size, chunk_size, n_eval, max_distance_km):
         im=ax.pcolormesh(lg,tg,np.ma.masked_invalid(zz),cmap='viridis',shading='auto')
         fig.colorbar(im,ax=ax,label='Mean absolute Spatial SHAP ($1,000s)')
         ax.set(xlabel='Longitude',ylabel='Latitude',title=f'Regional importance: {f} (masked > {max_distance_km} km)')
-        fig.tight_layout();fig.savefig(FIG/f'{f}_regional_importance.png',dpi=250);plt.close(fig)
+        fig.tight_layout();fig.savefig(FIG/f'{f}_{pfx}.png',dpi=250);plt.close(fig)
     print('Regional results saved; cells farther than threshold are masked.')
+
+
+def gaussian_tag(multiplier, background_size):
+    """Separate all Gaussian cache/output files by their relevant settings."""
+    if not np.isfinite(multiplier) or multiplier <= 0 or background_size < 1:
+        raise ValueError('Require bandwidth-multiplier > 0 and background-size >= 1')
+    return f'gaussian_bw{format(multiplier,".8g").replace(".","p")}_bg{background_size}_k{K}'
+
+
+def gaussian_run(limit, chunk_size, multiplier, background_size):
+    """Gaussian-kernel backgrounds, with deterministic per-house sampling and restartable chunks."""
+    if chunk_size < 1 or limit < 1:
+        raise ValueError('Require chunk-size >= 1 and limit >= 1')
+    tag=gaussian_tag(multiplier, background_size)
+    dirs();d,ind,knn=load_shap()
+    if limit > len(ind):
+        raise ValueError(f'Only {len(ind)} matching KNN SHAP houses cached; use --limit <= {len(ind)}')
+    Xte=d['X_test'].loc[ind[:limit]]
+    Xtr=d['X_train'];model=d['model']
+    ctr=d['coord_train'];cte=d['coord_test'].loc[Xte.index]
+    if len(Xtr)<K:
+        raise ValueError('Not enough training houses for adaptive bandwidth')
+    dst=distances(cte.lat,cte.long,ctr.lat,ctr.long)
+    for start in range(0,len(Xte),chunk_size):
+        end=min(start+chunk_size,len(Xte))
+        fn=CACHE/f'{tag}_{start:04d}_{end:04d}.npz'
+        if fn.exists():
+            with np.load(fn) as old:
+                if old['indices'].tolist()!=Xte.index[start:end].tolist():
+                    raise RuntimeError(f'Gaussian cache/test indices mismatch: {fn}')
+            print('Reuse Gaussian',fn.name);continue
+        vals=np.empty((end-start,Xte.shape[1]),dtype=float)
+        bases=np.empty(end-start,dtype=float)
+        bandwidths=np.empty(end-start,dtype=float)
+        predictions=model.predict(Xte.iloc[start:end])
+        for row in range(start,end):
+            distance_row=dst[row]
+            kth=float(np.partition(distance_row,K-1)[K-1])
+            h=max(kth*multiplier,1e-6)
+            logits=-0.5*(distance_row/h)**2
+            weights=np.exp(logits-np.max(logits))
+            weights/=np.sum(weights)
+            # Each house's draw is reproducible and independent of chunk size/resuming.
+            # The same seed across multipliers provides paired draws where feasible.
+            rng=np.random.default_rng(np.random.SeedSequence([SEED,row,background_size]))
+            positions=rng.choice(len(Xtr),size=background_size,replace=True,p=weights)
+            bg=Xtr.iloc[positions]
+            exp=shap.TreeExplainer(model,data=bg,feature_perturbation='interventional')
+            q=row-start
+            vals[q]=np.asarray(exp.shap_values(Xte.iloc[[row]],check_additivity=False))[0]
+            bases[q]=float(np.ravel(exp.expected_value)[0]);bandwidths[q]=h
+        errors=predictions-bases-vals.sum(axis=1)
+        if np.max(np.abs(errors))>1.0:
+            raise RuntimeError(f'Gaussian additivity error above $1 in {start}:{end}')
+        np.savez_compressed(fn,indices=Xte.index[start:end].to_numpy(),values=vals,
+                            baseline=bases,bandwidth_km=bandwidths,
+                            predictions=predictions,additivity_error=errors)
+        print(f'Cached Gaussian {end}/{len(Xte)} houses ({tag})')
+    print('Gaussian SHAP cached. Run gaussian-summary after all 600 houses.')
+
+
+def load_gaussian(tag, required_indices):
+    files=sorted(CACHE.glob(tag+'_????_????.npz'))
+    if not files:
+        raise FileNotFoundError(f'No Gaussian cache for {tag}; run gaussian first')
+    blocks=[];expected=0
+    for fn in files:
+        start,end=map(int,fn.stem.split('_')[-2:])
+        if start!=expected:
+            raise RuntimeError(f'Overlapping/gapped Gaussian chunks for {tag}; use one chunk size')
+        with np.load(fn) as z:
+            block={name:z[name] for name in z.files}
+        if block['indices'].tolist()!=required_indices[start:end].tolist():
+            raise RuntimeError(f'Gaussian indices mismatch: {fn}')
+        blocks.append(block);expected=end
+    if expected!=len(required_indices):
+        raise RuntimeError(f'Gaussian {tag}: {expected}/{len(required_indices)} houses cached')
+    return {key:np.concatenate([b[key] for b in blocks]) for key in blocks[0] if key!='indices'}
+
+
+def gaussian_summary(multiplier, background_size):
+    """Compare exactly matched Gaussian and KNN SHAP values for both chosen features."""
+    tag=gaussian_tag(multiplier,background_size)
+    dirs();d,ind,z=load_shap()
+    g=load_gaussian(tag,ind)
+    if np.max(np.abs(g['predictions']-z['predictions']))>1e-6:
+        raise RuntimeError('Gaussian and KNN predictions do not match')
+    loc=d['coord_test'].loc[ind]
+    rows=[]
+    for feature in FEATURES:
+        j=d['feature_names'].index(feature)
+        a=z['local'][:,j];b=g['values'][:,j]
+        agree=np.mean(np.sign(a)==np.sign(b))*100
+        rows.append(dict(feature=feature,houses=len(ind),pearson_r=float(np.corrcoef(a,b)[0,1]),
+                         spearman_r=float(pd.Series(a).corr(pd.Series(b),method='spearman')),
+                         mean_absolute_difference_usd=float(np.mean(np.abs(a-b))),
+                         sign_agreement_percent=float(agree)))
+        frame=pd.DataFrame(dict(index=ind,lat=loc.lat.to_numpy(),long=loc.long.to_numpy(),
+                                knn_spatial_shap_usd=a,gaussian_spatial_shap_usd=b,
+                                gaussian_minus_knn_usd=b-a,gaussian_bandwidth_km=g['bandwidth_km']))
+        frame.to_csv(TABLE/f'{feature}_{tag}_vs_knn.csv',index=False)
+        shared_vmax=max(float(np.max(np.abs(a))),float(np.max(np.abs(b))))
+        plot_spatial(frame.long,frame.lat,b,f'Gaussian Spatial SHAP: {feature}, bw={multiplier}',
+                     'Gaussian Spatial SHAP',FIG/f'{feature}_{tag}_spatial_shap.png',vmax=shared_vmax)
+        plot_spatial(frame.long,frame.lat,b-a,f'Gaussian minus KNN: {feature}',
+                     'Gaussian minus KNN',FIG/f'{feature}_{tag}_minus_knn.png')
+    summary=pd.DataFrame(rows)
+    summary.to_csv(TABLE/f'{tag}_vs_knn_summary.csv',index=False)
+    print(summary.to_string(index=False))
+    print('Mean Gaussian bandwidth (km):',float(np.mean(g['bandwidth_km'])))
+    print('Max Gaussian additivity error (USD):',float(np.max(np.abs(g['additivity_error']))))
+
+
+def gaussian_regional(grid_size, chunk_size, n_eval, max_distance_km, multiplier, background_size):
+    """Gaussian-kernel regional importance on the SAME evaluation houses/grid as KNN.
+
+    Only the background distribution changes.  Mean absolute SHAP is averaged
+    over the n_eval nearest training houses at each unmasked grid location.
+    """
+    if grid_size < 2 or chunk_size < 1 or n_eval < 1 or max_distance_km <= 0:
+        raise ValueError('Require grid-size >= 2, chunk-size >= 1, n-eval >= 1, max-distance-km > 0')
+    gaussian_tag(multiplier, background_size)
+    dirs();d=get();Xtr=d['X_train'];ctr=d['coord_train'];model=d['model']
+    if len(Xtr)<max(K,n_eval):
+        raise ValueError('K and n-eval must not exceed training sample size')
+    lats=np.linspace(ctr.lat.min(),ctr.lat.max(),grid_size)
+    lons=np.linspace(ctr.long.min(),ctr.long.max(),grid_size)
+    lg,tg=np.meshgrid(lons,lats)
+    latitude=tg.ravel();longitude=lg.ravel()
+    dst=distances(latitude,longitude,ctr.lat,ctr.long)
+    neighbor=np.argsort(dst,axis=1)[:,:max(K,n_eval)]
+    nearest=np.min(dst,axis=1)
+    mask_tag=format(max_distance_km,'.8g').replace('.','p')
+    grid_tag=f'g{grid_size}_eval{n_eval}_k{K}_mask{mask_tag}km'
+    pfx=f'gaussian_regional_{grid_tag}_bw{format(multiplier,".8g").replace(".","p")}_bg{background_size}'
+    for start in range(0,len(latitude),chunk_size):
+        end=min(start+chunk_size,len(latitude))
+        fn=CACHE/f'{pfx}_{start:04d}_{end:04d}.csv'
+        if fn.exists():
+            cached=pd.read_csv(fn)
+            if cached.grid_index.tolist()!=list(range(start,end)):
+                raise RuntimeError(f'Unexpected cached grid indexes in {fn}')
+            print('Reuse Gaussian regional',fn.name);continue
+        results=[]
+        for r in range(start,end):
+            rec={'grid_index':r,'lat':latitude[r],'long':longitude[r],
+                 'nearest_training_km':nearest[r]}
+            if nearest[r]>max_distance_km:
+                for f in FEATURES: rec[f+'_importance_usd']=np.nan
+                rec['gaussian_bandwidth_km']=np.nan
+            else:
+                distance_row=dst[r]
+                kth=float(np.partition(distance_row,K-1)[K-1])
+                h=max(kth*multiplier,1e-6)
+                logits=-0.5*(distance_row/h)**2
+                weights=np.exp(logits-np.max(logits))
+                weights/=weights.sum()
+                rng=np.random.default_rng(np.random.SeedSequence([SEED,987654,r,background_size]))
+                positions=rng.choice(len(Xtr),size=background_size,replace=True,p=weights)
+                background=Xtr.iloc[positions]
+                # Deliberately identical evaluation sample to KNN regional().
+                sample=Xtr.iloc[neighbor[r,:n_eval]]
+                exp=shap.TreeExplainer(model,data=background,feature_perturbation='interventional')
+                values=np.asarray(exp.shap_values(sample,check_additivity=False))
+                for f in FEATURES:
+                    j=d['feature_names'].index(f)
+                    rec[f+'_importance_usd']=float(np.mean(np.abs(values[:,j])))
+                rec['gaussian_bandwidth_km']=h
+            results.append(rec)
+        pd.DataFrame(results).to_csv(fn,index=False)
+        print(f'Gaussian regional cells cached {end}/{len(latitude)} ({pfx})')
+    files=sorted(CACHE.glob(pfx+'_????_????.csv'))
+    if not files: raise RuntimeError('No Gaussian regional chunks produced')
+    full=pd.concat([pd.read_csv(fn) for fn in files],ignore_index=True).sort_values('grid_index')
+    if full.grid_index.duplicated().any() or full.grid_index.tolist()!=list(range(len(latitude))):
+        raise RuntimeError('Gaussian regional cache has missing/duplicate indexes; keep one chunk size')
+    full.to_csv(TABLE/f'{pfx}.csv',index=False)
+
+    # KNN results are optional; if available, create numerical and visual comparisons.
+    knn_path=TABLE/f'regional_{grid_tag}.csv'
+    knn=pd.read_csv(knn_path) if knn_path.exists() else None
+    comparisons=[]
+    for f in FEATURES:
+        gauss=full[f+'_importance_usd'].to_numpy()
+        knn_values=None
+        vmax=float(np.nanmax(gauss))/1000
+        if knn is not None:
+            same=knn.sort_values('grid_index')
+            if same.grid_index.tolist()!=full.grid_index.tolist() or not np.allclose(same.lat,full.lat) or not np.allclose(same.long,full.long):
+                raise RuntimeError('KNN and Gaussian regional grids do not match')
+            knn_values=same[f+'_importance_usd'].to_numpy()
+            vmax=max(vmax,float(np.nanmax(knn_values))/1000)
+            valid=np.isfinite(gauss)&np.isfinite(knn_values)
+            if np.sum(valid)>1:
+                comparisons.append({'feature':f,'cells':int(np.sum(valid)),
+                    'pearson_r':float(np.corrcoef(gauss[valid],knn_values[valid])[0,1]),
+                    'mean_absolute_difference_usd':float(np.mean(np.abs(gauss[valid]-knn_values[valid])))})
+        for method,values in [('gaussian',gauss),('knn',knn_values)]:
+            if values is None: continue
+            fig,ax=plt.subplots(figsize=(9,7))
+            im=ax.pcolormesh(lg,tg,np.ma.masked_invalid(values.reshape(grid_size,grid_size)/1000),
+                             cmap='viridis',vmin=0,vmax=vmax,shading='auto')
+            fig.colorbar(im,ax=ax,label='Mean absolute Spatial SHAP ($1,000s)')
+            ax.set(xlabel='Longitude',ylabel='Latitude',
+                   title=f'{method.upper()} regional importance: {f} (masked > {max_distance_km} km)')
+            fig.tight_layout();fig.savefig(FIG/f'{f}_{method}_{pfx}.png',dpi=250);plt.close(fig)
+    if comparisons:
+        pd.DataFrame(comparisons).to_csv(TABLE/f'{pfx}_vs_knn_summary.csv',index=False)
+        print('Gaussian vs KNN regional importance:')
+        print(pd.DataFrame(comparisons).to_string(index=False))
+    print('Gaussian regional results saved in',TABLE,'and',FIG)
 
 
 def summary():
@@ -259,12 +489,31 @@ def main():
     pr=sub.add_parser('regional');pr.add_argument('--grid-size',type=int,default=20)
     pr.add_argument('--chunk-size',type=int,default=20);pr.add_argument('--n-eval',type=int,default=10)
     pr.add_argument('--max-distance-km',type=float,default=10)
+    pg=sub.add_parser('gaussian')
+    pg.add_argument('--limit',type=int,default=600)
+    pg.add_argument('--chunk-size',type=int,default=25)
+    pg.add_argument('--bandwidth-multiplier',type=float,default=1.0)
+    pg.add_argument('--background-size',type=int,default=100)
+    pgs=sub.add_parser('gaussian-summary')
+    pgs.add_argument('--bandwidth-multiplier',type=float,default=1.0)
+    pgs.add_argument('--background-size',type=int,default=100)
+    pgr=sub.add_parser('gaussian-regional')
+    pgr.add_argument('--grid-size',type=int,default=20)
+    pgr.add_argument('--chunk-size',type=int,default=20)
+    pgr.add_argument('--n-eval',type=int,default=30)
+    pgr.add_argument('--max-distance-km',type=float,default=10)
+    pgr.add_argument('--bandwidth-multiplier',type=float,default=1.0)
+    pgr.add_argument('--background-size',type=int,default=100)
     sub.add_parser('summary')
     args=p.parse_args()
     if args.step=='prepare':prepare()
     elif args.step=='shap':shap_run(args.limit,args.chunk_size)
     elif args.step=='maps':maps()
     elif args.step=='regional':regional(args.grid_size,args.chunk_size,args.n_eval,args.max_distance_km)
+    elif args.step=='gaussian':gaussian_run(args.limit,args.chunk_size,args.bandwidth_multiplier,args.background_size)
+    elif args.step=='gaussian-summary':gaussian_summary(args.bandwidth_multiplier,args.background_size)
+    elif args.step=='gaussian-regional':gaussian_regional(args.grid_size,args.chunk_size,args.n_eval,
+        args.max_distance_km,args.bandwidth_multiplier,args.background_size)
     else:summary()
 
 
